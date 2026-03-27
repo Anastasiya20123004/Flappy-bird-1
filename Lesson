@@ -1,0 +1,69 @@
+from pygame import *
+from random import randint
+# Запуск гри
+init()
+window_size = (1200, 800)
+window = display.set_mode(window_size)
+clock = time.Clock()
+# Гравець
+player_rect = Rect(150, window_size[1] // 2 - 100, 100, 100)
+y_vel = 0
+gravity = 1
+jump_force = -15
+
+def generate_pipes(count, pipe_width = 140, gap = 280, min_height = 50, max_height = 440, distance = 650):
+    pipes = []
+    start_x = window_size[0]
+    for i in range(count):
+        height = randint(min_height, max_height)
+        top_pipe = Rect(start_x, 0, pipe_width, height)
+        bottom_pipe = Rect(start_x, height + gap, pipe_width, window_size[0] - (height + gap))
+        pipes.extend([top_pipe, bottom_pipe])
+        start_x += distance
+    return pipes
+
+pipes = generate_pipes(100)
+lose = False
+running = True
+count = 0
+while running:
+    for e in event.get():
+        if e.type == QUIT:
+            running = False
+    window.fill((175, 238, 238))
+    draw.rect(window, (255, 255, 0), player_rect)
+    for pipe in pipes:
+        if not lose:
+            pipe.x -=10
+            draw.rect(window, (0, 255, 0), pipe)
+        if pipe.x <= -100:
+            pipes.remove(pipe)
+            count += 1
+        if player_rect.colliderect(pipe):
+            lose = True
+    # Управління гравцем
+    keys = key.get_pressed()
+    if keys[K_SPACE] and not lose:
+        y_vel = jump_force
+    if not lose:
+        y_vel += gravity
+        player_rect.y += y_vel
+    if player_rect.y > window_size[1] or player_rect.y < 0:
+        if not lose:
+            lose = True
+    if keys[K_r]:
+        score = 0
+        player_rect.y = 50
+        pipes = generate_pipes(100)
+        lose = False
+        y_vel = 0
+    main_font = font.SysFont("Arial", 30)
+    if lose:
+        text = main_font.render("Game Over - Press R for Restart", True, (0, 0, 0))
+        window.blit(text, (window_size[0]//2 - text.get_width(), window_size[1]//2 ))
+
+    score_text = main_font.render("Score: " + str(count), True, (0, 0, 0))
+    window.blit(score_text, (0, 0))
+
+    display.update()
+    clock.tick(60)
