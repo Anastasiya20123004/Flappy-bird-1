@@ -1,17 +1,35 @@
 from pygame import *
 from random import randint
+import sounddevice as sd
+import numpy as np
+
+# Аудіо
+fs = 16000
+block = 256 # час між записами
+mic_level = 0.02 # поточний рівень гучності
+# обробка аудіо
+def audio_cb(indata, frames, time, status):
+    global mic_level
+    if status:
+        return
+    rms = float(np.sqrt(np.mean(indata**2)))
+    mic_level = 0.85 * mic_level + 0.15 * rms
+
+
 # Запуск гри
 init()
 window_size = (1200, 800)
 window = display.set_mode(window_size)
 clock = time.Clock()
 # Гравець
-player_rect = Rect(150, window_size[1] // 2 - 100, 100, 100)
+player_rect = Rect(150, window_size[1] // 2 - 100, 50, 50)
 y_vel = 0
-gravity = 1
-jump_force = -15
-
-def generate_pipes(count, pipe_width = 140, gap = 280, min_height = 50, max_height = 440, distance = 650):
+gravity = 0.3
+jump_force = -3
+speed = 8
+player_img = transform.scale(image.load("Bird-Photoroom.png"), (50, 50))
+pipe_img = transform.scale(image.load("Pip.jpg"), (120, 600))
+def generate_pipes(count, pipe_width = 120, gap = 300, min_height = 40, max_height = 430, distance = 650):
     pipes = []
     start_x = window_size[0]
     for i in range(count):
@@ -26,44 +44,57 @@ pipes = generate_pipes(100)
 lose = False
 running = True
 count = 0
-while running:
-    for e in event.get():
-        if e.type == QUIT:
-            running = False
-    window.fill((175, 238, 238))
-    draw.rect(window, (255, 255, 0), player_rect)
-    for pipe in pipes:
+THRESHOLD = 0.01
+IMPULSE = -5.0
+with sd.InputStream(samplerate = fs, channels = 1, blocksize = block, callback = audio_cb):
+    while running:
+        for e in event.get():
+            if e.type == QUIT:
+                running = False
+        window.fill((175, 238, 238))
+        window.blit(player_img, player_rect)
+        for pipe in pipes:
+            if not lose:
+                pipe.x -= speed
+                if pipe.y == 0:
+                    flip_pip = transform.flip(pipe_img, False, True)
+                    window.blit(flip_pip, (pipe.x, pipe.y - (pipe_img.get_height() - pipe.h)))
+                draw.rect(window, (0, 255, 0), pipe)
+            if pipe.x <= -100:
+                pipes.remove(pipe)
+                count += 0.5
+                speed += 0.5
+            if player_rect.colliderect(pipe):
+                lose = True
+        # Управління гравцем
+        keys = key.get_pressed()
+        if keys[K_SPACE] and not lose:
+            y_vel = jump_force
+        # Управління голосом і чутливість
+        if mic_level > THRESHOLD:
+            y_vel = IMPULSE
         if not lose:
-            pipe.x -=10
-            draw.rect(window, (0, 255, 0), pipe)
-        if pipe.x <= -100:
-            pipes.remove(pipe)
-            count += 1
-        if player_rect.colliderect(pipe):
-            lose = True
-    # Управління гравцем
-    keys = key.get_pressed()
-    if keys[K_SPACE] and not lose:
-        y_vel = jump_force
-    if not lose:
-        y_vel += gravity
-        player_rect.y += y_vel
-    if player_rect.y > window_size[1] or player_rect.y < 0:
-        if not lose:
-            lose = True
-    if keys[K_r]:
-        score = 0
-        player_rect.y = 50
-        pipes = generate_pipes(100)
-        lose = False
-        y_vel = 0
-    main_font = font.SysFont("Arial", 30)
-    if lose:
-        text = main_font.render("Game Over - Press R for Restart", True, (0, 0, 0))
-        window.blit(text, (window_size[0]//2 - text.get_width(), window_size[1]//2 ))
+            y_vel += gravity
+            player_rect.y += y_vel
+        if player_rect.y > window_size[1] or player_rect.y < 0:
+            if not lose:
+                lose = True
+        if keys[K_r]:
+            count = 0
+            speed = 8
+            player_rect.y = 50
+            pipes = generate_pipes(100)
+            lose = False
+            y_vel = 0
+        main_font = font.SysFont("Arial", 30)
+        if lose:
+            text = main_font.render("Game Over - Press R for Restart", True, (0, 0, 0))
+            window.blit(text, (window_size[0]//2 - text.get_width(), window_size[1]//2 ))
 
-    score_text = main_font.render("Score: " + str(count), True, (0, 0, 0))
-    window.blit(score_text, (0, 0))
+        score_text = main_font.render("Score: " + str(count), True, (0, 0, 0))
+        window.blit(score_text, (0, 0))
+        speed_text = main_font.render("Speed: " + str(speed-7), True, (0, 0, 0))
+        window.blit(speed_text, (1050, 0))
 
-    display.update()
-    clock.tick(60)
+        display.update()
+        clock.tick(60)
